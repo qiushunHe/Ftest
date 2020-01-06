@@ -1,13 +1,13 @@
 set.seed(1)
 library(caret)
 ## load data
-fm<-read.table("sc1_Phase1_GE_FeatureMatrix.tsv",header=T,row.names = 1)
+fm<-read.table("../../sc1_Phase1_GE_FeatureMatrix.tsv",header=T,row.names = 1)
 oc<-read.table("sc1_Phase1_GE_Outcome.tsv",header=T)
 ph<-read.table("sc1_Phase1_GE_Phenotype.tsv",header=T,sep="\t")
 ## prepocessing
 ### 去除方差接近0的基因（病人间基本没差异）
 zv=nearZeroVar(fm)
-fm<-fm[,-zv]
+#fm<-fm[,-zv]       ## zv为空时，会删掉fm的数据，所以要注意
 ### 去除相关性>0.9
 Corr=cor(fm)
 hc=findCorrelation(Corr,0.90)
