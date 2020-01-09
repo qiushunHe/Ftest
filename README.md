@@ -32,3 +32,9 @@ git push origin master
 ```
 
 <p style="color:#4d80e4;font-weight:bold"><u>(二) 内容说明</u></p>
+
+#### sc1
+```
+1. 基因的表达值是否需要转成0、1的表示
+2. 特征选择时是否用pca来降维
+```
