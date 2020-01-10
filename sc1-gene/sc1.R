@@ -2,6 +2,8 @@ set.seed(10)
 library(caret)
 library(e1071)
 library(randomForest)
+library(gbm)
+library(ROCR)
 ## 读取数据
 fm<-read.table("../../sc1_Phase1_GE_FeatureMatrix.tsv",header=T,row.names = 1)
 oc<-read.table("sc1_Phase1_GE_Outcome.tsv",header=T)
@@ -37,7 +39,6 @@ fm_fine$status<-as.factor(fm_fine$status)
 control<-trainControl(method="repeatedcv",number=10,repeats=10,verbose=F,returnResamp="final")
 model<-train(status~.,data=fm_fine,method="lvq",preProcess="scale",trControl=control)
 importance<-varImp(model,scale=F)
-print(importance)
 pdf("importance.pdf")
 plot(importance)
 dev.off()
@@ -45,19 +46,22 @@ dev.off()
 control<-rfeControl(functions=rfFuncs,method="cv",number=10)
 subsets=c(20,30,40,50,60,70,80,90)
 fs_profile<-rfe(fm_fine[,1:376],fm_fine[,377],sizes=subsets,rfeControl=control)
-print(fs_profile)
-print(fs_profile$optVariables)
-predictors(fs_profile)
 plot(fs_profile,type=c("g","o"))
 ### 3.重要性和特征选择的结果进行比较
-
+imp<-importance$importance
+impGene<-row.names(imp[order(imp$X0,decreasing=T),])
+fsGene<-predictors(fs_profile)
+itsGene<-intersect(impGene[1:fs_profile$optsize],fsGene)
 ### 4.特征过滤
+### 应该用哪些来作为特征，暂时用feature selection的结果
 
 ## 建模及调参
 ### 数据分割(train和test)
 inTrain=createDataPartition(fm_fine$status,p=3/4,list=F)
-trainx<-fm_fine[inTrain,1:376]
-testx<-fm_fine[-inTrain,1:376]
+trainx<-fm_fine[inTrain,fsGene]
+#trainx<-fm_fine[inTrain,1:376]
+testx<-fm_fine[-inTrain,fsGene]
+#testx<-fm_fine[-inTrain,1:376]
 trainy=fm_fine[inTrain,377]
 testy=fm_fine[-inTrain,377]
 ##featurePlot(trainx[,1:2],trainy,plot='box')
@@ -68,30 +72,31 @@ fitControl=trainControl(method="repeatedcv",number=10,repeats=10,returnResamp="a
 gbmGrid=expand.grid(.interaction.depth=c(1,3), .n.trees=c(50,100,150,200,250,300), .shrinkage=0.1, .n.minobsinnode=10)
 #### 训练模型
 gbmFit=train(trainx,trainy,method="gbm",trControl=fitControl,tuneGrid=gbmGrid,verbose=F)
+pdf("gbmfit.pdf")
 plot(gbmFit)
+dev.off()
 #### 预测模型
-predict(gbmFit,newdata=textx)
+predict(gbmFit,newdata=testx)
 
 ### 模型比较
 gbmFit2=train(trainx,trainy,method="treebag",trControl=fitControl)
 models=list(gbmFit,gbmFit2)
 #### 提取test的结果
 predValues = extractPrediction(models,testX=testx,testY=testy)
-print(predValues)
 testValues=subset(predValues,dataType=="Test")
-#### 提取test的概率
-probValues=extractProb(models,testX=testx,testY=testy)
-testProbs=subset(probValues,dataType="Test")
 #### 分类混淆矩阵
 Pred1=subset(testValues,model=="gbm")
 Pred2=subset(testValues,model=="treebag")
 confusionMatrix(Pred1$pred,Pred1$obs)
 confusionMatrix(Pred2$pred,Pred2$obs)
 
+#### 提取test的概率
+probValues=extractProb(models,testX=testx,testY=testy)
+testProbs=subset(probValues,dataType="Test")
 ### ROC图，根据上述模型的比较来决定画哪一个的ROC图
 prob1=subset(testProbs,model=="gbm")
-library(ROCR)
-prob1$label=ifelse(prob1$obs=='Active',yes=1,0)
-pred1=prediction(prob1$Active,prob1$label)
+pred1=prediction(as.numeric(prob1$obs),as.numeric(prob1$pred))				## as.numeric
 pref1=performance(pred1,measure="tpr",x.measure="fpr")
+pdf("ROC.pdf")
 plot(pref1)
+dev.off()
